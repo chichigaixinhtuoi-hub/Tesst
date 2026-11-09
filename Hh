@@ -18,7 +18,7 @@ local MainTab = Window:MakeTab({
 
 MainTab:AddLabel("By timelesstrue")
 
--- 0. FIX GAMEPLAY PAUSED (Chạy độc lập để chống đứng hình khi tele xa)
+-- 0. FIX GAMEPLAY PAUSED (Chạy ngầm chống đứng hình khi tele xa / desync)
 local RunService = game:GetService("RunService")
 local antiPauseConnection = nil
 
@@ -42,24 +42,24 @@ MainTab:AddToggle({
     end
 })
 
--- Tự động chạy ngầm Anti-Pause để trị triệt để lỗi đứng hình
+-- Tự động chạy ngầm Anti-Pause để bảo vệ game ngay từ đầu
 antiPauseConnection = RunService.Stepped:Connect(function()
     pcall(function()
         settings():GetService("RenderSettings").EagerBulkExecution = true
     end)
 end)
 
--- 1. TỐI ƯU RENDER: Giới hạn phạm vi 500 studs (Giữ max setting, không lag khi đi xa)
+-- 1. TỐI ƯU RENDER: Giới hạn phạm vi 400 studs (Mượt mà tuyệt đối khi đi xa)
 local optimizeConnection = nil
 MainTab:AddToggle({
-    Name = "Optimize Render Range (500 Studs Radius)",
+    Name = "Optimize Render Range (400 Studs Radius)",
     Default = false,
     Callback = function(Value)
         local Players = game:GetService("Players")
         local LocalPlayer = Players.LocalPlayer
         
         if Value then
-            OrionLib:MakeNotification({ Name = "Optimizer Active", Content = "Đã bật giới hạn 500 studs!", Image = "rbxassetid://4483345998", Time = 3 })
+            OrionLib:MakeNotification({ Name = "Optimizer Active", Content = "Đã bật giới hạn 400 studs!", Image = "rbxassetid://4483345998", Time = 3 })
             
             if optimizeConnection then optimizeConnection:Disconnect() end
             optimizeConnection = RunService.Heartbeat:Connect(function()
@@ -70,7 +70,7 @@ MainTab:AddToggle({
                 for _, obj in ipairs(workspace:GetChildren()) do
                     if obj ~= char and obj:IsA("Model") and obj.PrimaryPart then
                         local distance = (obj.PrimaryPart.Position - rootPos).Magnitude
-                        if distance > 500 then
+                        if distance > 400 then
                             if obj.Parent ~= nil then
                                 for _, part in ipairs(obj:GetDescendants()) do
                                     if part:IsA("BasePart") then
@@ -110,7 +110,7 @@ MainTab:AddButton({
     end
 })
 
--- 3. GOD MODE & UNLOCK MOVEMENT (Không spam phím E, không lag, chống khóa di chuyển trên không)
+-- 3. GOD MODE & UNLOCK MOVEMENT (Bất tử nhẹ nhàng, chống khóa di chuyển trên không)
 local godModeConnection = nil
 local unlockMoveConnection = nil
 local isGodModeActive = false
