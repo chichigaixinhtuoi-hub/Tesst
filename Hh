@@ -16,40 +16,46 @@ local MainTab = Window:MakeTab({
     PremiumOnly = false
 })
 
--- Thêm nhãn (Label) thông tin tác giả
 MainTab:AddLabel("By timelesstrue")
 
--- 0. FIX GAMEPLAY PAUSED (Chống đứng hình khi Teleport xa / Desync)
+-- 0. FIX GAMEPLAY PAUSED (Chạy độc lập để chống đứng hình khi tele xa)
+local RunService = game:GetService("RunService")
 local antiPauseConnection = nil
+
 MainTab:AddToggle({
-    Name = "Fix Gameplay Paused (Teleport & Desync)",
+    Name = "Fix Gameplay Paused (Anti-Lag/Desync)",
     Default = true,
     Callback = function(Value)
-        local RunService = game:GetService("RunService")
         if Value then
             if antiPauseConnection then antiPauseConnection:Disconnect() end
             antiPauseConnection = RunService.Stepped:Connect(function()
-                settings():GetService("RenderSettings").EagerBulkExecution = true
                 pcall(function()
+                    settings():GetService("RenderSettings").EagerBulkExecution = true
                     setfpscap(999)
                 end)
             end)
             OrionLib:MakeNotification({ Name = "Anti-Pause Active", Content = "Đã bật chống đứng hình khi dịch chuyển xa!", Image = "rbxassetid://4483345998", Time = 3 })
         else
             if antiPauseConnection then antiPauseConnection:Disconnect() antiPauseConnection = nil end
-            OrionLib:MakeNotification({ Name = "Anti-Pause Disabled", Content = "Đã tắt chế độ chống đứng hình.", Image = "rbxassetid://4483345998", Time = 3 })
+            OrionLib:MakeNotification({ Name = "Anti-Pause Disabled", Content = "Đã tắt chống đứng hình.", Image = "rbxassetid://4483345998", Time = 3 })
         end
     end
 })
 
--- 1. TỐI ƯU RENDER: Giới hạn phạm vi 500 studs (Mượt mà, không lag)
+-- Tự động chạy ngầm Anti-Pause để trị triệt để lỗi đứng hình
+antiPauseConnection = RunService.Stepped:Connect(function()
+    pcall(function()
+        settings():GetService("RenderSettings").EagerBulkExecution = true
+    end)
+end)
+
+-- 1. TỐI ƯU RENDER: Giới hạn phạm vi 500 studs (Giữ max setting, không lag khi đi xa)
 local optimizeConnection = nil
 MainTab:AddToggle({
     Name = "Optimize Render Range (500 Studs Radius)",
     Default = false,
     Callback = function(Value)
         local Players = game:GetService("Players")
-        local RunService = game:GetService("RunService")
         local LocalPlayer = Players.LocalPlayer
         
         if Value then
@@ -104,7 +110,7 @@ MainTab:AddButton({
     end
 })
 
--- 3. GOD MODE & UNLOCK MOVEMENT (Đã sửa lỗi lag và khóa di chuyển khi morph)
+-- 3. GOD MODE & UNLOCK MOVEMENT (Không spam phím E, không lag, chống khóa di chuyển trên không)
 local godModeConnection = nil
 local unlockMoveConnection = nil
 local isGodModeActive = false
@@ -115,12 +121,11 @@ MainTab:AddToggle({
     Callback = function(Value)
         isGodModeActive = Value
         local player = game:GetService("Players").LocalPlayer
-        local RunService = game:GetService("RunService")
         
         if isGodModeActive then
             OrionLib:MakeNotification({ 
                 Name = "God Mode Enabled", 
-                Content = "Đã bật bất tử nhẹ nhàng & chống khóa di chuyển khi morph!", 
+                Content = "Đã bật bất tử nhẹ nhàng & chống khóa di chuyển!", 
                 Image = "rbxassetid://4483345998", 
                 Time = 3 
             })
@@ -128,7 +133,6 @@ MainTab:AddToggle({
             local function setupGodMode(char)
                 local humanoid = char:WaitForChild("Humanoid", 5)
                 if humanoid then
-                    -- Cơ chế God Mode tối ưu (Không dùng vòng lặp nặng, chỉ bắt sự kiện thay đổi máu)
                     if godModeConnection then godModeConnection:Disconnect() end
                     godModeConnection = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
                         if isGodModeActive and humanoid.Health <= 0 then
@@ -137,17 +141,14 @@ MainTab:AddToggle({
                     end)
                 end
                 
-                -- Mở khóa trạng thái di chuyển (Chống bị game quét đóng băng/khóa WalkSpeed trên không)
                 if unlockMoveConnection then unlockMoveConnection:Disconnect() end
                 unlockMoveConnection = RunService.RenderStepped:Connect(function()
                     if not isGodModeActive then return end
                     local hum = char:FindFirstChildOfClass("Humanoid")
                     if hum then
-                        -- Ép mở khóa các trạng thái bị khóa cứng do animation morph hoặc anti-cheat
                         hum.PlatformStand = false
                         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                        -- Đảm bảo tốc độ di chuyển không bị kẹt về 0
                         if hum.WalkSpeed < 16 then
                             hum.WalkSpeed = 16
                         end
@@ -159,7 +160,6 @@ MainTab:AddToggle({
             player.CharacterAdded:Connect(setupGodMode)
             
         else
-            -- Tắt tính năng và dọn dẹp kết nối
             if godModeConnection then godModeConnection:Disconnect() godModeConnection = nil end
             if unlockMoveConnection then unlockMoveConnection:Disconnect() unlockMoveConnection = nil end
             
