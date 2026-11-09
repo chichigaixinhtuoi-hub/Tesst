@@ -21,8 +21,6 @@ MainTab:AddLabel("By timelesstrue")
 
 -- 0. FIX GAMEPLAY PAUSED (Chống đứng hình khi Teleport xa / Desync)
 local antiPauseConnection = nil
-local teleportService = game:GetService("TeleportService")
-
 MainTab:AddToggle({
     Name = "Fix Gameplay Paused (Teleport & Desync)",
     Default = true,
@@ -30,36 +28,21 @@ MainTab:AddToggle({
         local RunService = game:GetService("RunService")
         if Value then
             if antiPauseConnection then antiPauseConnection:Disconnect() end
-            -- Duy trì nhịp kết nối liên tục, chặn việc game tự động pause khi load map xa
             antiPauseConnection = RunService.Stepped:Connect(function()
                 settings():GetService("RenderSettings").EagerBulkExecution = true
                 pcall(function()
-                    setfpscap(999) -- Giữ khung hình ổn định không bị tụt đột ngột
+                    setfpscap(999)
                 end)
             end)
-            
-            OrionLib:MakeNotification({ 
-                Name = "Anti-Pause Active", 
-                Content = "Đã bật chế độ chống đứng hình khi dịch chuyển xa!", 
-                Image = "rbxassetid://4483345998", 
-                Time = 3 
-            })
+            OrionLib:MakeNotification({ Name = "Anti-Pause Active", Content = "Đã bật chống đứng hình khi dịch chuyển xa!", Image = "rbxassetid://4483345998", Time = 3 })
         else
-            if antiPauseConnection then 
-                antiPauseConnection:Disconnect() 
-                antiPauseConnection = nil 
-            end
-            OrionLib:MakeNotification({ 
-                Name = "Anti-Pause Disabled", 
-                Content = "Đã tắt chế độ chống đứng hình.", 
-                Image = "rbxassetid://4483345998", 
-                Time = 3 
-            })
+            if antiPauseConnection then antiPauseConnection:Disconnect() antiPauseConnection = nil end
+            OrionLib:MakeNotification({ Name = "Anti-Pause Disabled", Content = "Đã tắt chế độ chống đứng hình.", Image = "rbxassetid://4483345998", Time = 3 })
         end
     end
 })
 
--- 1. TỐI ƯU RENDER: Giới hạn phạm vi 500 studs (Max Setting nhưng không lag)
+-- 1. TỐI ƯU RENDER: Giới hạn phạm vi 500 studs (Mượt mà, không lag)
 local optimizeConnection = nil
 MainTab:AddToggle({
     Name = "Optimize Render Range (500 Studs Radius)",
@@ -70,12 +53,7 @@ MainTab:AddToggle({
         local LocalPlayer = Players.LocalPlayer
         
         if Value then
-            OrionLib:MakeNotification({ 
-                Name = "Optimizer Active", 
-                Content = "Đã bật giới hạn 500 studs, mượt mà khi đi xa!", 
-                Image = "rbxassetid://4483345998", 
-                Time = 3 
-            })
+            OrionLib:MakeNotification({ Name = "Optimizer Active", Content = "Đã bật giới hạn 500 studs!", Image = "rbxassetid://4483345998", Time = 3 })
             
             if optimizeConnection then optimizeConnection:Disconnect() end
             optimizeConnection = RunService.Heartbeat:Connect(function()
@@ -106,12 +84,7 @@ MainTab:AddToggle({
             end)
         else
             if optimizeConnection then optimizeConnection:Disconnect() optimizeConnection = nil end
-            OrionLib:MakeNotification({ 
-                Name = "Optimizer Disabled", 
-                Content = "Đã tắt tối ưu phạm vi render.", 
-                Image = "rbxassetid://4483345998", 
-                Time = 3 
-            })
+            OrionLib:MakeNotification({ Name = "Optimizer Disabled", Content = "Đã tắt tối ưu phạm vi render.", Image = "rbxassetid://4483345998", Time = 3 })
         end
     end
 })
@@ -127,74 +100,72 @@ MainTab:AddButton({
                 count = count + 1
             end
         end
-        OrionLib:MakeNotification({ 
-            Name = "Thành công!", 
-            Content = "Đã dọn dẹp và xóa " .. count .. " đối tượng.", 
-            Image = "rbxassetid://4483345998", 
-            Time = 5 
-        })
+        OrionLib:MakeNotification({ Name = "Thành công!", Content = "Đã dọn dẹp và xóa " .. count .. " đối tượng.", Image = "rbxassetid://4483345998", Time = 5 })
     end
 })
 
--- 3. Bypass & Auto-Trigger Morph
-local bypassConnection = nil
-local antiResetConnection = nil
-local autoTriggerConnection = nil
-local isBypassing = false
+-- 3. GOD MODE & UNLOCK MOVEMENT (Đã sửa lỗi lag và khóa di chuyển khi morph)
+local godModeConnection = nil
+local unlockMoveConnection = nil
+local isGodModeActive = false
 
 MainTab:AddToggle({
-    Name = "Bypass & Auto-Trigger Morph",
+    Name = "God Mode & Unlock Movement",
     Default = false,
     Callback = function(Value)
-        isBypassing = Value
+        isGodModeActive = Value
         local player = game:GetService("Players").LocalPlayer
         local RunService = game:GetService("RunService")
         
-        if isBypassing then
+        if isGodModeActive then
             OrionLib:MakeNotification({ 
-                Name = "Bypass Enabled", 
-                Content = "Đã bật chống chết tạm thời & Auto-Trigger!", 
+                Name = "God Mode Enabled", 
+                Content = "Đã bật bất tử nhẹ nhàng & chống khóa di chuyển khi morph!", 
                 Image = "rbxassetid://4483345998", 
                 Time = 3 
             })
             
-            local function setupProtection(char)
+            local function setupGodMode(char)
                 local humanoid = char:WaitForChild("Humanoid", 5)
                 if humanoid then
-                    if bypassConnection then bypassConnection:Disconnect() end
-                    bypassConnection = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-                        if isBypassing and humanoid.Health <= 0 then
+                    -- Cơ chế God Mode tối ưu (Không dùng vòng lặp nặng, chỉ bắt sự kiện thay đổi máu)
+                    if godModeConnection then godModeConnection:Disconnect() end
+                    godModeConnection = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+                        if isGodModeActive and humanoid.Health <= 0 then
                             humanoid.Health = humanoid.MaxHealth
                         end
                     end)
                 end
                 
-                if autoTriggerConnection then autoTriggerConnection:Disconnect() end
-                autoTriggerConnection = RunService.Heartbeat:Connect(function()
-                    if not isBypassing then return end
-                    local rootPart = char:FindFirstChild("HumanoidRootPart")
-                    if rootPart then
-                        for _, obj in ipairs(workspace:GetDescendants()) do
-                            if obj:IsA("ProximityPrompt") and obj.Parent then
-                                local distance = (obj.Parent.Position - rootPart.Position).Magnitude
-                                if distance <= obj.MaxActivationDistance then
-                                    fireproximityprompt(obj)
-                                end
-                            end
+                -- Mở khóa trạng thái di chuyển (Chống bị game quét đóng băng/khóa WalkSpeed trên không)
+                if unlockMoveConnection then unlockMoveConnection:Disconnect() end
+                unlockMoveConnection = RunService.RenderStepped:Connect(function()
+                    if not isGodModeActive then return end
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        -- Ép mở khóa các trạng thái bị khóa cứng do animation morph hoặc anti-cheat
+                        hum.PlatformStand = false
+                        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                        -- Đảm bảo tốc độ di chuyển không bị kẹt về 0
+                        if hum.WalkSpeed < 16 then
+                            hum.WalkSpeed = 16
                         end
                     end
                 end)
             end
             
-            if player.Character then setupProtection(player.Character) end
-            antiResetConnection = player.CharacterAdded:Connect(setupProtection)
+            if player.Character then setupGodMode(player.Character) end
+            player.CharacterAdded:Connect(setupGodMode)
+            
         else
-            if bypassConnection then bypassConnection:Disconnect() bypassConnection = nil end
-            if antiResetConnection then antiResetConnection:Disconnect() antiResetConnection = nil end
-            if autoTriggerConnection then autoTriggerConnection:Disconnect() autoTriggerConnection = nil end
+            -- Tắt tính năng và dọn dẹp kết nối
+            if godModeConnection then godModeConnection:Disconnect() godModeConnection = nil end
+            if unlockMoveConnection then unlockMoveConnection:Disconnect() unlockMoveConnection = nil end
+            
             OrionLib:MakeNotification({ 
-                Name = "Bypass Disabled", 
-                Content = "Đã tắt chế độ Bypass.", 
+                Name = "God Mode Disabled", 
+                Content = "Đã tắt chế độ God Mode.", 
                 Image = "rbxassetid://4483345998", 
                 Time = 3 
             })
