@@ -19,29 +19,50 @@ local MainTab = Window:MakeTab({
 -- Thêm nhãn (Label) thông tin tác giả
 MainTab:AddLabel("By timelesstrue")
 
--- 0. Fix Gameplay Paused (Chống đứng hình / Desync)
+-- 0. FIX GAMEPLAY PAUSED (Chống đứng hình khi Teleport xa / Desync)
 local antiPauseConnection = nil
+local teleportService = game:GetService("TeleportService")
+
 MainTab:AddToggle({
-    Name = "Fix Gameplay Paused (Anti-Lag/Desync)",
+    Name = "Fix Gameplay Paused (Teleport & Desync)",
     Default = true,
     Callback = function(Value)
         local RunService = game:GetService("RunService")
         if Value then
             if antiPauseConnection then antiPauseConnection:Disconnect() end
+            -- Duy trì nhịp kết nối liên tục, chặn việc game tự động pause khi load map xa
             antiPauseConnection = RunService.Stepped:Connect(function()
                 settings():GetService("RenderSettings").EagerBulkExecution = true
+                pcall(function()
+                    setfpscap(999) -- Giữ khung hình ổn định không bị tụt đột ngột
+                end)
             end)
-            OrionLib:MakeNotification({ Name = "Anti-Pause Active", Content = "Đã giữ kết nối game ổn định!", Image = "rbxassetid://4483345998", Time = 3 })
+            
+            OrionLib:MakeNotification({ 
+                Name = "Anti-Pause Active", 
+                Content = "Đã bật chế độ chống đứng hình khi dịch chuyển xa!", 
+                Image = "rbxassetid://4483345998", 
+                Time = 3 
+            })
         else
-            if antiPauseConnection then antiPauseConnection:Disconnect() antiPauseConnection = nil end
+            if antiPauseConnection then 
+                antiPauseConnection:Disconnect() 
+                antiPauseConnection = nil 
+            end
+            OrionLib:MakeNotification({ 
+                Name = "Anti-Pause Disabled", 
+                Content = "Đã tắt chế độ chống đứng hình.", 
+                Image = "rbxassetid://4483345998", 
+                Time = 3 
+            })
         end
     end
 })
 
--- 1. TÍNH NĂNG MỚI: Giới hạn render phạm vi 1000 studs (Max Setting nhưng không lag khi đi xa)
+-- 1. TỐI ƯU RENDER: Giới hạn phạm vi 500 studs (Max Setting nhưng không lag)
 local optimizeConnection = nil
 MainTab:AddToggle({
-    Name = "Optimize Render Range (1000 Studs Radius)",
+    Name = "Optimize Render Range (500 Studs Radius)",
     Default = false,
     Callback = function(Value)
         local Players = game:GetService("Players")
@@ -49,22 +70,24 @@ MainTab:AddToggle({
         local LocalPlayer = Players.LocalPlayer
         
         if Value then
-            OrionLib:MakeNotification({ Name = "Optimizer Active", Content = "Đã bật giới hạn 1000 studs, giữ nguyên max setting gần bạn!", Image = "rbxassetid://4483345998", Time = 3 })
+            OrionLib:MakeNotification({ 
+                Name = "Optimizer Active", 
+                Content = "Đã bật giới hạn 500 studs, mượt mà khi đi xa!", 
+                Image = "rbxassetid://4483345998", 
+                Time = 3 
+            })
             
-            -- Sử dụng vòng lặp kiểm tra khoảng cách vật thể/model nặng trong Workspace
             if optimizeConnection then optimizeConnection:Disconnect() end
             optimizeConnection = RunService.Heartbeat:Connect(function()
                 local char = LocalPlayer.Character
                 if not char or not char:FindFirstChild("HumanoidRootPart") then return end
                 local rootPos = char.HumanoidRootPart.Position
                 
-                -- Duyệt qua các mô hình/vật thể lớn ngoài phạm vi 1000 studs để ẩn bớt, giảm tải GPU
                 for _, obj in ipairs(workspace:GetChildren()) do
                     if obj ~= char and obj:IsA("Model") and obj.PrimaryPart then
                         local distance = (obj.PrimaryPart.Position - rootPos).Magnitude
-                        if distance > 1000 then
-                            if obj.Parent ~= nil and obj.PrimaryPart.Transparency < 1 then
-                                -- Ẩn tạm thời khi ở xa trên 1000 studs
+                        if distance > 500 then
+                            if obj.Parent ~= nil then
                                 for _, part in ipairs(obj:GetDescendants()) do
                                     if part:IsA("BasePart") then
                                         part.LocalTransparencyModifier = 1
@@ -72,7 +95,6 @@ MainTab:AddToggle({
                                 end
                             end
                         else
-                            -- Hiện lại bình thường khi bước vào phạm vi dưới 1000 studs
                             for _, part in ipairs(obj:GetDescendants()) do
                                 if part:IsA("BasePart") then
                                     part.LocalTransparencyModifier = 0
@@ -84,7 +106,12 @@ MainTab:AddToggle({
             end)
         else
             if optimizeConnection then optimizeConnection:Disconnect() optimizeConnection = nil end
-            OrionLib:MakeNotification({ Name = "Optimizer Disabled", Content = "Đã tắt tối ưu phạm vi render.", Image = "rbxassetid://4483345998", Time = 3 })
+            OrionLib:MakeNotification({ 
+                Name = "Optimizer Disabled", 
+                Content = "Đã tắt tối ưu phạm vi render.", 
+                Image = "rbxassetid://4483345998", 
+                Time = 3 
+            })
         end
     end
 })
@@ -100,7 +127,12 @@ MainTab:AddButton({
                 count = count + 1
             end
         end
-        OrionLib:MakeNotification({ Name = "Thành công!", Content = "Đã dọn dẹp và xóa " .. count .. " đối tượng.", Image = "rbxassetid://4483345998", Time = 5 })
+        OrionLib:MakeNotification({ 
+            Name = "Thành công!", 
+            Content = "Đã dọn dẹp và xóa " .. count .. " đối tượng.", 
+            Image = "rbxassetid://4483345998", 
+            Time = 5 
+        })
     end
 })
 
@@ -119,7 +151,12 @@ MainTab:AddToggle({
         local RunService = game:GetService("RunService")
         
         if isBypassing then
-            OrionLib:MakeNotification({ Name = "Bypass Enabled", Content = "Đã bật chống chết tạm thời & Auto-Trigger!", Image = "rbxassetid://4483345998", Time = 3 })
+            OrionLib:MakeNotification({ 
+                Name = "Bypass Enabled", 
+                Content = "Đã bật chống chết tạm thời & Auto-Trigger!", 
+                Image = "rbxassetid://4483345998", 
+                Time = 3 
+            })
             
             local function setupProtection(char)
                 local humanoid = char:WaitForChild("Humanoid", 5)
@@ -155,7 +192,12 @@ MainTab:AddToggle({
             if bypassConnection then bypassConnection:Disconnect() bypassConnection = nil end
             if antiResetConnection then antiResetConnection:Disconnect() antiResetConnection = nil end
             if autoTriggerConnection then autoTriggerConnection:Disconnect() autoTriggerConnection = nil end
-            OrionLib:MakeNotification({ Name = "Bypass Disabled", Content = "Đã tắt chế độ Bypass.", Image = "rbxassetid://4483345998", Time = 3 })
+            OrionLib:MakeNotification({ 
+                Name = "Bypass Disabled", 
+                Content = "Đã tắt chế độ Bypass.", 
+                Image = "rbxassetid://4483345998", 
+                Time = 3 
+            })
         end
     end
 })
