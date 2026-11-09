@@ -18,7 +18,7 @@ local MainTab = Window:MakeTab({
 
 MainTab:AddLabel("By timelesstrue")
 
--- 0. FIX GAMEPLAY PAUSED (Chạy ngầm chống đứng hình khi tele xa / desync)
+-- 0. FIX GAMEPLAY PAUSED & LOADING LAG (Chạy ngầm chống đứng hình khi tele/loading place xa)
 local RunService = game:GetService("RunService")
 local antiPauseConnection = nil
 
@@ -34,7 +34,7 @@ MainTab:AddToggle({
                     setfpscap(999)
                 end)
             end)
-            OrionLib:MakeNotification({ Name = "Anti-Pause Active", Content = "Đã bật chống đứng hình khi dịch chuyển xa!", Image = "rbxassetid://4483345998", Time = 3 })
+            OrionLib:MakeNotification({ Name = "Anti-Pause Active", Content = "Đã bật chống đứng hình khi loading & dịch chuyển!", Image = "rbxassetid://4483345998", Time = 3 })
         else
             if antiPauseConnection then antiPauseConnection:Disconnect() antiPauseConnection = nil end
             OrionLib:MakeNotification({ Name = "Anti-Pause Disabled", Content = "Đã tắt chống đứng hình.", Image = "rbxassetid://4483345998", Time = 3 })
@@ -42,14 +42,14 @@ MainTab:AddToggle({
     end
 })
 
--- Tự động chạy ngầm Anti-Pause để bảo vệ game ngay từ đầu
+-- Tự động chạy ngầm Anti-Pause để bảo vệ game ngay từ khoảnh khắc spawn
 antiPauseConnection = RunService.Stepped:Connect(function()
     pcall(function()
         settings():GetService("RenderSettings").EagerBulkExecution = true
     end)
 end)
 
--- 1. TỐI ƯU RENDER: Giới hạn phạm vi 400 studs (Mượt mà tuyệt đối khi đi xa)
+-- 1. TỐI ƯU RENDER: Giới hạn phạm vi 400 studs (Mượt mà tuyệt đối khi đi xa hoặc load map)
 local optimizeConnection = nil
 MainTab:AddToggle({
     Name = "Optimize Render Range (400 Studs Radius)",
@@ -110,13 +110,13 @@ MainTab:AddButton({
     end
 })
 
--- 3. GOD MODE & UNLOCK MOVEMENT (Bất tử nhẹ nhàng, chống khóa di chuyển trên không)
+-- 3. GOD MODE, UNLOCK MOVEMENT & ANTI-FLOAT (Chống lơ lửng trên không, chống reset, tự do di chuyển xuống đất)
 local godModeConnection = nil
 local unlockMoveConnection = nil
 local isGodModeActive = false
 
 MainTab:AddToggle({
-    Name = "God Mode & Unlock Movement",
+    Name = "God Mode & Anti-Float Spawn",
     Default = false,
     Callback = function(Value)
         isGodModeActive = Value
@@ -124,14 +124,16 @@ MainTab:AddToggle({
         
         if isGodModeActive then
             OrionLib:MakeNotification({ 
-                Name = "God Mode Enabled", 
-                Content = "Đã bật bất tử nhẹ nhàng & chống khóa di chuyển!", 
+                Name = "Protection Enabled", 
+                Content = "Đã bật chống lơ lửng, bất tử & mở khóa di chuyển!", 
                 Image = "rbxassetid://4483345998", 
                 Time = 3 
             })
             
-            local function setupGodMode(char)
+            local function setupProtection(char)
                 local humanoid = char:WaitForChild("Humanoid", 5)
+                local rootPart = char:WaitForChild("HumanoidRootPart", 5)
+                
                 if humanoid then
                     if godModeConnection then godModeConnection:Disconnect() end
                     godModeConnection = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
@@ -141,31 +143,45 @@ MainTab:AddToggle({
                     end)
                 end
                 
+                -- Khử trạng thái lơ lửng khi spawn, cho phép chủ động rơi xuống đất và không bị khóa
+                if rootPart and humanoid then
+                    pcall(function()
+                        humanoid.PlatformStand = false
+                        rootPart.AssemblyLinearVelocity = Vector3.new(0, -10, 0) -- Ép nhẹ lực đẩy xuống đất tránh bị kẹt trên không
+                    end)
+                end
+                
                 if unlockMoveConnection then unlockMoveConnection:Disconnect() end
                 unlockMoveConnection = RunService.RenderStepped:Connect(function()
                     if not isGodModeActive then return end
                     local hum = char:FindFirstChildOfClass("Humanoid")
+                    local root = char:FindFirstChild("HumanoidRootPart")
                     if hum then
                         hum.PlatformStand = false
                         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                        hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
                         if hum.WalkSpeed < 16 then
                             hum.WalkSpeed = 16
                         end
                     end
+                    -- Nếu bị treo lơ lửng quá lâu trên không do lỗi map, tự động mở khóa lực hút để rơi xuống an toàn
+                    if root and root.Position.Y > 1000 and hum then
+                        hum:ChangeState(Enum.HumanoidStateType.Freefall)
+                    end
                 end)
             end
             
-            if player.Character then setupGodMode(player.Character) end
-            player.CharacterAdded:Connect(setupGodMode)
+            if player.Character then setupProtection(player.Character) end
+            player.CharacterAdded:Connect(setupProtection)
             
         else
             if godModeConnection then godModeConnection:Disconnect() godModeConnection = nil end
             if unlockMoveConnection then unlockMoveConnection:Disconnect() unlockMoveConnection = nil end
             
             OrionLib:MakeNotification({ 
-                Name = "God Mode Disabled", 
-                Content = "Đã tắt chế độ God Mode.", 
+                Name = "Protection Disabled", 
+                Content = "Đã tắt chế độ bảo vệ.", 
                 Image = "rbxassetid://4483345998", 
                 Time = 3 
             })
