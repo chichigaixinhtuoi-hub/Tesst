@@ -1,0 +1,164 @@
+-- Gọi thư viện Orion Library
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()
+
+-- Tạo cửa sổ chính (Window)
+local Window = OrionLib:MakeWindow({
+    Name = "Undertale Rp Mess Timeline",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "UndertaleConfig"
+})
+
+-- Tạo Tab "Main"
+local MainTab = Window:MakeTab({
+    Name = "Main",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Thêm nhãn (Label) thông tin tác giả
+MainTab:AddLabel("By timelesstrue")
+
+-- 0. Fix Gameplay Paused (Chống đứng hình / Desync)
+local antiPauseConnection = nil
+MainTab:AddToggle({
+    Name = "Fix Gameplay Paused (Anti-Lag/Desync)",
+    Default = true,
+    Callback = function(Value)
+        local RunService = game:GetService("RunService")
+        if Value then
+            if antiPauseConnection then antiPauseConnection:Disconnect() end
+            antiPauseConnection = RunService.Stepped:Connect(function()
+                settings():GetService("RenderSettings").EagerBulkExecution = true
+            end)
+            OrionLib:MakeNotification({ Name = "Anti-Pause Active", Content = "Đã giữ kết nối game ổn định!", Image = "rbxassetid://4483345998", Time = 3 })
+        else
+            if antiPauseConnection then antiPauseConnection:Disconnect() antiPauseConnection = nil end
+        end
+    end
+})
+
+-- 1. TÍNH NĂNG MỚI: Giới hạn render phạm vi 1000 studs (Max Setting nhưng không lag khi đi xa)
+local optimizeConnection = nil
+MainTab:AddToggle({
+    Name = "Optimize Render Range (1000 Studs Radius)",
+    Default = false,
+    Callback = function(Value)
+        local Players = game:GetService("Players")
+        local RunService = game:GetService("RunService")
+        local LocalPlayer = Players.LocalPlayer
+        
+        if Value then
+            OrionLib:MakeNotification({ Name = "Optimizer Active", Content = "Đã bật giới hạn 1000 studs, giữ nguyên max setting gần bạn!", Image = "rbxassetid://4483345998", Time = 3 })
+            
+            -- Sử dụng vòng lặp kiểm tra khoảng cách vật thể/model nặng trong Workspace
+            if optimizeConnection then optimizeConnection:Disconnect() end
+            optimizeConnection = RunService.Heartbeat:Connect(function()
+                local char = LocalPlayer.Character
+                if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+                local rootPos = char.HumanoidRootPart.Position
+                
+                -- Duyệt qua các mô hình/vật thể lớn ngoài phạm vi 1000 studs để ẩn bớt, giảm tải GPU
+                for _, obj in ipairs(workspace:GetChildren()) do
+                    if obj ~= char and obj:IsA("Model") and obj.PrimaryPart then
+                        local distance = (obj.PrimaryPart.Position - rootPos).Magnitude
+                        if distance > 1000 then
+                            if obj.Parent ~= nil and obj.PrimaryPart.Transparency < 1 then
+                                -- Ẩn tạm thời khi ở xa trên 1000 studs
+                                for _, part in ipairs(obj:GetDescendants()) do
+                                    if part:IsA("BasePart") then
+                                        part.LocalTransparencyModifier = 1
+                                    end
+                                end
+                            end
+                        else
+                            -- Hiện lại bình thường khi bước vào phạm vi dưới 1000 studs
+                            for _, part in ipairs(obj:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    part.LocalTransparencyModifier = 0
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            if optimizeConnection then optimizeConnection:Disconnect() optimizeConnection = nil end
+            OrionLib:MakeNotification({ Name = "Optimizer Disabled", Content = "Đã tắt tối ưu phạm vi render.", Image = "rbxassetid://4483345998", Time = 3 })
+        end
+    end
+})
+
+-- 2. Nút xóa Character Box
+MainTab:AddButton({
+    Name = "Delete Character Box",
+    Callback = function()
+        local count = 0
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if string.find(string.lower(v.Name), "box") then
+                v:Destroy()
+                count = count + 1
+            end
+        end
+        OrionLib:MakeNotification({ Name = "Thành công!", Content = "Đã dọn dẹp và xóa " .. count .. " đối tượng.", Image = "rbxassetid://4483345998", Time = 5 })
+    end
+})
+
+-- 3. Bypass & Auto-Trigger Morph
+local bypassConnection = nil
+local antiResetConnection = nil
+local autoTriggerConnection = nil
+local isBypassing = false
+
+MainTab:AddToggle({
+    Name = "Bypass & Auto-Trigger Morph",
+    Default = false,
+    Callback = function(Value)
+        isBypassing = Value
+        local player = game:GetService("Players").LocalPlayer
+        local RunService = game:GetService("RunService")
+        
+        if isBypassing then
+            OrionLib:MakeNotification({ Name = "Bypass Enabled", Content = "Đã bật chống chết tạm thời & Auto-Trigger!", Image = "rbxassetid://4483345998", Time = 3 })
+            
+            local function setupProtection(char)
+                local humanoid = char:WaitForChild("Humanoid", 5)
+                if humanoid then
+                    if bypassConnection then bypassConnection:Disconnect() end
+                    bypassConnection = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+                        if isBypassing and humanoid.Health <= 0 then
+                            humanoid.Health = humanoid.MaxHealth
+                        end
+                    end)
+                end
+                
+                if autoTriggerConnection then autoTriggerConnection:Disconnect() end
+                autoTriggerConnection = RunService.Heartbeat:Connect(function()
+                    if not isBypassing then return end
+                    local rootPart = char:FindFirstChild("HumanoidRootPart")
+                    if rootPart then
+                        for _, obj in ipairs(workspace:GetDescendants()) do
+                            if obj:IsA("ProximityPrompt") and obj.Parent then
+                                local distance = (obj.Parent.Position - rootPart.Position).Magnitude
+                                if distance <= obj.MaxActivationDistance then
+                                    fireproximityprompt(obj)
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            
+            if player.Character then setupProtection(player.Character) end
+            antiResetConnection = player.CharacterAdded:Connect(setupProtection)
+        else
+            if bypassConnection then bypassConnection:Disconnect() bypassConnection = nil end
+            if antiResetConnection then antiResetConnection:Disconnect() antiResetConnection = nil end
+            if autoTriggerConnection then autoTriggerConnection:Disconnect() autoTriggerConnection = nil end
+            OrionLib:MakeNotification({ Name = "Bypass Disabled", Content = "Đã tắt chế độ Bypass.", Image = "rbxassetid://4483345998", Time = 3 })
+        end
+    end
+})
+
+-- Khởi động giao diện Orion
+OrionLib:Init()
